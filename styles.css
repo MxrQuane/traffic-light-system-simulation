@@ -1,0 +1,121 @@
+.traffic-light {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: #222;
+  padding: 10px;
+  border-radius: 10px;
+  width: 50px;
+}
+
+.light {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin: 5px auto;
+}
+
+.red-on { background: #ff0000; box-shadow: 0 0 20px #ff0000; }
+.red-off { background: #4a0000; }
+.yellow-on { background: #ffff00; box-shadow: 0 0 20px #ffff00; }
+.yellow-off { background: #4a4a00; }
+.green-on { background: #00ff00; box-shadow: 0 0 20px #00ff00; }
+.green-off { background: #004a00; }
+
+.traffic-light-with-ped {
+  display: inline-block;
+  scale: 0.8;
+}
+
+.ped-light {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: #222;
+  padding: 8px;
+  border-radius: 8px;
+  margin-top: 5px;
+}
+
+.ped-signal {
+  font-size: 20px;
+  padding: 5px;
+  text-align: center;
+}
+
+.ped-red-on { filter: brightness(1) drop-shadow(0 0 10px red); }
+.ped-red-off { filter: brightness(0.3); }
+.ped-green-on { filter: brightness(1) drop-shadow(0 0 10px lime); }
+.ped-green-off { filter: brightness(0.3); }
+
+.car {
+  position: absolute;
+  font-size: 24px;
+  transition: all 0.3s linear;
+}
+
+.intersection-container {
+  position: relative;
+  width: 600px;
+  height: 600px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.road-horizontal {
+  position: absolute;
+  top: 250px;
+  left: 0;
+  width: 600px;
+  height: 100px;
+  background: #333;
+}
+
+.road-vertical {
+  position: absolute;
+  top: 0;
+  left: 250px;
+  width: 100px;
+  height: 600px;
+  background: #333;
+}
+
+.road-line-h {
+  position: absolute;
+  top: 295px;
+  left: 0;
+  width: 600px;
+  height: 10px;
+  background: repeating-linear-gradient(90deg, white 0, white 30px, transparent 30px, transparent 60px);
+}
+
+.road-line-v {
+  position: absolute;
+  top: 0;
+  left: 295px;
+  width: 10px;
+  height: 600px;
+  background: repeating-linear-gradient(0deg, white 0, white 30px, transparent 30px, transparent 60px);
+}
+
+.intersection-center {
+  position: absolute;
+  top: 250px;
+  left: 250px;
+  width: 100px;
+  height: 100px;
+  background: #333;
+}
+
+.traffic-light-pos-ns {
+  position: absolute;
+  bottom: 360px;
+  right: 360px;
+}
+
+.traffic-light-pos-ew {
+  position: absolute;
+  top: 85px;
+  left: 460px;
+  transform: rotate(-90deg);
+}
