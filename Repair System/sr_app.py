@@ -54,38 +54,6 @@ if st.sidebar.checkbox("Show generator matrix Q"):
     st.subheader("Generator Matrix Q")
     st.dataframe(Q, use_container_width=True)
 
-def theoretical_steady_state(N, lambda_rate, mu_rate, teams):
-    rho = lambda_rate / mu_rate
-    pi = np.zeros(N+1)
-    
-    if teams == 1:
-        pi[0] = 1.0
-        for i in range(1, N+1):
-            pi[i] = pi[i-1] * (N - i + 1) * rho / i
-        pi = pi / np.sum(pi)
-    else:  # teams == 2
-        pi[0] = 1.0
-        pi[1] = N * rho * pi[0]
-        for i in range(2, N+1):
-            if i <= 2:
-                pi[i] = pi[i-1] * (N - i + 1) * rho / 2
-            else:
-                pi[i] = pi[i-1] * (N - i + 1) * rho / 2
-        pi = pi / np.sum(pi)
-    
-    theoretical_availability = sum((N - i) * pi[i] for i in range(N+1)) / N
-    return pi, theoretical_availability
-
-# Display comparison
-st.subheader("📐 Theoretical")
-pi_theory, avail_theory = theoretical_steady_state(N, lambda_rate, mu_rate, teams)
-col1, col2 = st.columns(2)
-with col1:
-    st.write("**Theoretical steady-state:**")
-    for i, p in enumerate(pi_theory):
-        st.write(f"π({i}) = {p:.4f}")
-    st.info(f"Theoretical availability: {avail_theory:.4f}")
-
 # Session state init
 if "running" not in st.session_state:
     st.session_state.running = False
@@ -108,9 +76,9 @@ if "step_pending" not in st.session_state:
 # Controls
 col1, col2 = st.sidebar.columns(2)
 
-if col1.button("▶ Start"):
-    st.session_state.running = True
-    st.session_state.step_pending = True
+if col1.button("▶️ Start" if not st.session_state.running else "⏸️ Stop"):
+    st.session_state.running = not st.session_state.running
+    st.session_state.last_update = time.time()
 
 if col2.button("🔄 Reset"):
     st.session_state.running = False
@@ -235,6 +203,38 @@ if st.session_state.time > 0:
         st.write(f"P(X = {i}) = {p:.4f}")
 
     st.success(f"🔋 Availability = {availability:.4f}")
+
+def theoretical_steady_state(N, lambda_rate, mu_rate, teams):
+    rho = lambda_rate / mu_rate
+    pi = np.zeros(N+1)
+    
+    if teams == 1:
+        pi[0] = 1.0
+        for i in range(1, N+1):
+            pi[i] = pi[i-1] * (N - i + 1) * rho / i
+        pi = pi / np.sum(pi)
+    else:  # teams == 2
+        pi[0] = 1.0
+        pi[1] = N * rho * pi[0]
+        for i in range(2, N+1):
+            if i <= 2:
+                pi[i] = pi[i-1] * (N - i + 1) * rho / 2
+            else:
+                pi[i] = pi[i-1] * (N - i + 1) * rho / 2
+        pi = pi / np.sum(pi)
+    
+    theoretical_availability = sum((N - i) * pi[i] for i in range(N+1)) / N
+    return pi, theoretical_availability
+
+# Display comparison
+st.subheader("📐 Theoretical")
+pi_theory, avail_theory = theoretical_steady_state(N, lambda_rate, mu_rate, teams)
+col1, col2 = st.columns(2)
+with col1:
+    st.write("**Theoretical steady-state:**")
+    for i, p in enumerate(pi_theory):
+        st.write(f"π({i}) = {p:.4f}")
+    st.info(f"Theoretical availability: {avail_theory:.4f}")
 
 # Footer
 st.markdown(
