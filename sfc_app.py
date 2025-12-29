@@ -38,77 +38,93 @@ class Car:
         
         # Starting positions
         if direction == 'ns':  # North to South
-            self.x = 275
+            self.x = 260
             self.y = -30
         elif direction == 'sn':  # South to North
             self.x = 315
             self.y = 630
         elif direction == 'ew':  # East to West
             self.x = 630
-            self.y = 275
+            self.y = 250
         elif direction == 'we':  # West to East
             self.x = -30
             self.y = 315
+
+    def is_blocking(self, other_car, safe_distance):
+        """Helper function to determine if another car is blocking."""
+        if self.direction in ['ns', 'sn']:
+            vertical_check = (other_car.direction == self.direction and
+                            abs(other_car.y - self.y) < safe_distance and
+                            ((self.direction == 'ns' and other_car.y > self.y) or
+                            (self.direction == 'sn' and other_car.y < self.y)))
+            intersection_check = (other_car.direction in ['we', 'ew'] and
+                                self.is_in_intersection() and
+                                abs(other_car.x - self.x) < safe_distance and
+                                abs(other_car.y - self.y) < safe_distance)
+            return vertical_check or intersection_check
+
+        if self.direction in ['ew', 'we']:
+            horizontal_check = (other_car.direction == self.direction and
+                                abs(other_car.x - self.x) < safe_distance and
+                                ((self.direction == 'ew' and other_car.x < self.x) or
+                                (self.direction == 'we' and other_car.x > self.x)))
+            intersection_check = (other_car.direction in ['ns', 'sn'] and
+                                self.is_in_intersection() and
+                                abs(other_car.x - self.x) < safe_distance and
+                                abs(other_car.y - self.y) < safe_distance)
+            return horizontal_check or intersection_check
+
+        return False
+
+    def is_in_intersection(self):
+        """Helper function to check if the car is in the intersection area."""
+        if self.direction in ['ns', 'sn']:
+            return 200 < self.y < 250 if self.direction == 'ns' else 350 < self.y < 400
+        if self.direction in ['ew', 'we']:
+            return 350 < self.x < 400 if self.direction == 'ew' else 200 < self.x < 250
+        return False
     
     def update(self, can_move, cars_ahead):
         speed = 10
         safe_distance = 40  # Minimum distance between cars
-        
+
         # Check if there's a car too close ahead
-        car_blocking = False
-        for other_car in cars_ahead:
-            if other_car.id == self.id:
-                continue
-                
-            if self.direction == 'ns' and other_car.direction == 'ns':
-                if other_car.y > self.y and other_car.y - self.y < safe_distance:
-                    car_blocking = True
-                    break
-            elif self.direction == 'sn' and other_car.direction == 'sn':
-                if other_car.y < self.y and self.y - other_car.y < safe_distance:
-                    car_blocking = True
-                    break
-            elif self.direction == 'ew' and other_car.direction == 'ew':
-                if other_car.x < self.x and self.x - other_car.x < safe_distance:
-                    car_blocking = True
-                    break
-            elif self.direction == 'we' and other_car.direction == 'we':
-                if other_car.x > self.x and other_car.x - self.x < safe_distance:
-                    car_blocking = True
-                    break
-        
+        car_blocking = any(self.is_blocking(other_car, safe_distance) for other_car in cars_ahead if other_car.id != self.id)
+
         # Don't move if car ahead is too close or if red light at intersection
         if car_blocking:
             return
-        
+
+        if self.direction == 'ns' and (not can_move and self.is_in_intersection()):
+            return
+        if self.direction == 'sn' and (not can_move and self.is_in_intersection()):
+            return
+        if self.direction == 'ew' and (not can_move and self.is_in_intersection()):
+            return
+        if self.direction == 'we' and (not can_move and self.is_in_intersection()):
+            return
+
+        # Update position based on direction
         if self.direction == 'ns':
-            if not can_move and 200 < self.y < 250:
-                return  # Stop before intersection
             self.y += speed
         elif self.direction == 'sn':
-            if not can_move and 350 < self.y < 400:
-                return
             self.y -= speed
         elif self.direction == 'ew':
-            if not can_move and 350 < self.x < 400:
-                return
             self.x -= speed
         elif self.direction == 'we':
-            if not can_move and 200 < self.x < 250:
-                return
             self.x += speed
-    
+        
     def is_off_screen(self):
         return self.x < -50 or self.x > 650 or self.y < -50 or self.y > 650
     
     def get_html(self):
-        rotation = 0
+        rotation = -90
         if self.direction == 'ew':
-            rotation = 90
+            rotation = 0
         elif self.direction == 'we':
-            rotation = -90
-        elif self.direction == 'sn':
             rotation = 180
+        elif self.direction == 'sn':
+            rotation = 90
         
         # Use car ID for stable z-index that doesn't change when other cars despawn
         # Each direction gets a base layer, then add the unique car ID
