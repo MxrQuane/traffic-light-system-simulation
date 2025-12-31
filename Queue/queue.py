@@ -10,7 +10,7 @@ import pandas as pd
 st.set_page_config(page_title="Queue M/M/c", layout="wide")
 
 def load_css():
-    with open("Queue/styles.css") as f:
+    with open("styles.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 load_css()
 

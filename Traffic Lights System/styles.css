@@ -119,3 +119,10 @@
   left: 460px;
   transform: rotate(-90deg);
 }
+
+.metric-card {
+  background: #f0f2f6;
+  padding: 15px;
+  border-radius: 10px;
+  margin: 10px 0;
+}
