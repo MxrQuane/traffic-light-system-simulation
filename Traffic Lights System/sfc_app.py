@@ -1,6 +1,8 @@
 import streamlit as st
 import time
 import random
+import numpy as np
+import pandas as pd
 
 st.set_page_config(page_title="Traffic Light Intersection", layout="wide")
 
@@ -28,13 +30,29 @@ if 'car_spawn_counter' not in st.session_state:
     st.session_state.car_spawn_counter = 0
 if 'next_car_id' not in st.session_state:
     st.session_state.next_car_id = 0
+if 'simulation_time' not in st.session_state:
+    st.session_state.simulation_time = 0
+if 'statistics' not in st.session_state:
+    st.session_state.statistics = {
+        'total_cars_served': 0,
+        'wait_times': [],
+        'queue_lengths_ns': [],
+        'queue_lengths_ew': [],
+        'phase_changes': 0,
+        'cars_per_direction': {'ns': 0, 'sn': 0, 'ew': 0, 'we': 0}
+    }
+if 'departed_cars' not in st.session_state:
+    st.session_state.departed_cars = []
 
 # Car class
 class Car:
-    def __init__(self, direction, car_id):
+    def __init__(self, direction, car_id, arrival_time):
         self.direction = direction  # 'ns', 'sn', 'ew', 'we'
         self.id = car_id
         self.emoji = random.choice(['🚗', '🚕', '🚙', '🚌'])
+        self.arrival_time = arrival_time
+        self.service_start_time = None
+        self.departure_time = None
         
         # Starting positions
         if direction == 'ns':  # North to South
@@ -84,7 +102,7 @@ class Car:
             return 350 < self.x < 400 if self.direction == 'ew' else 200 < self.x < 250
         return False
     
-    def update(self, can_move, cars_ahead):
+    def update(self, can_move, cars_ahead, current_time):
         speed = 10
         safe_distance = 40  # Minimum distance between cars
 
@@ -95,14 +113,11 @@ class Car:
         if car_blocking:
             return
 
-        if self.direction == 'ns' and (not can_move and self.is_in_intersection()):
-            return
-        if self.direction == 'sn' and (not can_move and self.is_in_intersection()):
-            return
-        if self.direction == 'ew' and (not can_move and self.is_in_intersection()):
-            return
-        if self.direction == 'we' and (not can_move and self.is_in_intersection()):
-            return
+        if self.is_in_intersection():
+            if not can_move:
+                return
+            elif self.service_start_time is None and can_move:
+                self.service_start_time = current_time
 
         # Update position based on direction
         if self.direction == 'ns':
@@ -143,7 +158,8 @@ class Car:
 st.sidebar.title("🚦 Traffic Light Controls")
 green_min = st.sidebar.slider("Green Light Min (seconds)", 1, 10, 3)
 green_max = st.sidebar.slider("Green Light Max (seconds)", 1, 15, 6)
-car_spawn_rate = st.sidebar.slider("Car Spawn Rate", 1, 10, 5)
+arrival_rate = st.sidebar.slider("λ (Arrival Rate - cars/min)", 1, 60, 8)
+st.sidebar.caption(f"Mean inter-arrival time: {60/arrival_rate:.1f}s")
 
 if st.sidebar.button("▶️ Start" if not st.session_state.running else "⏸️ Stop"):
     st.session_state.running = not st.session_state.running
@@ -157,35 +173,32 @@ if st.sidebar.button("🔄 Reset"):
     st.session_state.cars = []
     st.session_state.car_spawn_counter = 0
     st.session_state.next_car_id = 0
+    st.session_state.simulation_time = 0
+    st.session_state.statistics = {
+        'total_cars_served': 0,
+        'wait_times': [],
+        'queue_lengths_ns': [],
+        'queue_lengths_ew': [],
+        'phase_changes': 0,
+        'cars_per_direction': {'ns': 0, 'sn': 0, 'ew': 0, 'we': 0}
+    }
+    st.session_state.departed_cars = []
+
+# Calculate and display system utilization
+mean_service_time = (green_min + green_max) / 2
+rho = (arrival_rate / 60) / (1 / mean_service_time)
+st.sidebar.markdown(f"**System Utilization (ρ):** {rho:.3f}")
+if rho >= 1:
+    st.sidebar.warning("⚠️ System unstable (ρ ≥ 1)")
+else:
+    st.sidebar.success("✓ System stable (ρ < 1)")
 
 # Display current status
 phase_names = ["🟢 North-South Green", "🟢 East-West Green"]
 st.sidebar.markdown(f"**Current Phase:** {phase_names[st.session_state.phase]}")
 st.sidebar.markdown(f"**Timer:** {st.session_state.timer}s / {st.session_state.duration}s")
 st.sidebar.markdown(f"**Cars on road:** {len(st.session_state.cars)}")
-
-# Update logic
-if st.session_state.running:
-    current_time = time.time()
-    if current_time - st.session_state.last_update >= 1:
-        st.session_state.timer += 1
-        st.session_state.last_update = current_time
-        
-        if st.session_state.timer >= st.session_state.duration:
-            st.session_state.phase = (st.session_state.phase + 1) % 2
-            st.session_state.timer = 0
-            st.session_state.duration = random.randint(green_min, green_max)
-        
-        # Spawn new cars
-        st.session_state.car_spawn_counter += 1
-        if st.session_state.car_spawn_counter >= (11 - car_spawn_rate):
-            directions = ['ns', 'sn', 'ew', 'we']
-            new_car = Car(random.choice(directions), st.session_state.next_car_id)
-            st.session_state.cars.append(new_car)
-            st.session_state.next_car_id += 1
-            st.session_state.car_spawn_counter = 0
-        
-        st.rerun()
+st.sidebar.markdown(f"**Simulation Time:** {st.session_state.simulation_time}s")
 
 # Function to get light state
 def get_light_state(direction):
@@ -225,40 +238,150 @@ def traffic_light_with_ped(state, ped_state=None):
 ns_can_move = get_light_state('ns') == 'green'
 ew_can_move = get_light_state('ew') == 'green'
 
+# Update logic
+if st.session_state.running:
+    current_time = time.time()
+    if current_time - st.session_state.last_update >= 1:
+        st.session_state.timer += 1
+        st.session_state.simulation_time += 1
+        st.session_state.last_update = current_time
+        
+        if st.session_state.timer >= st.session_state.duration:
+            st.session_state.phase = (st.session_state.phase + 1) % 2
+            st.session_state.timer = 0
+            st.session_state.duration = random.randint(green_min, green_max)
+            st.session_state.statistics['phase_changes'] += 1
+        
+        spawn_probability = arrival_rate / 60  # Convert to per-second rate
+        if random.random() < spawn_probability:
+            directions = ['ns', 'sn', 'ew', 'we']
+            direction = random.choice(directions)
+            new_car = Car(random.choice(directions), st.session_state.next_car_id, st.session_state.simulation_time)
+            st.session_state.cars.append(new_car)
+            st.session_state.statistics['cars_per_direction'][direction] += 1
+            st.session_state.car_spawn_counter = 0
+            st.session_state.next_car_id += 1
+
+        # Record queue lengths
+        ns_queue = sum(
+            1 for car in st.session_state.cars
+            if car.direction in ['ns'] and car.y < 260 and not ns_can_move or car.direction in ['sn'] and car.y > 340 and not ns_can_move
+        )
+        ew_queue = sum(
+            1 for car in st.session_state.cars
+            if car.direction in ['ew'] and car.x > 340 and not ew_can_move or car.direction in ['we'] and car.x < 210 and not ew_can_move
+        )
+
+        if ns_queue > 0:
+            st.session_state.statistics['queue_lengths_ns'].append(ns_queue)
+        if ew_queue > 0:
+            st.session_state.statistics['queue_lengths_ew'].append(ew_queue)
+        
+        st.rerun()
+
 for car in st.session_state.cars:
     can_move = ns_can_move if car.direction in ['ns', 'sn'] else ew_can_move
-    car.update(can_move, st.session_state.cars)
+    car.update(can_move, st.session_state.cars, st.session_state.simulation_time)
 
-# Remove off-screen cars
-# st.session_state.cars = [car for car in st.session_state.cars if not car.is_off_screen()]
+# Remove off-screen cars and calculate statistics
+for car in st.session_state.cars:
+    if car.is_off_screen():
+        car.departure_time = st.session_state.simulation_time
+        wait_time = car.departure_time - car.arrival_time
+        st.session_state.statistics['wait_times'].append(wait_time)
+        st.session_state.statistics['total_cars_served'] += 1
+        st.session_state.departed_cars.append({
+            'id': car.id,
+            'direction': car.direction,
+            'arrival': car.arrival_time,
+            'departure': car.departure_time,
+            'wait_time': wait_time
+        })
+
+st.session_state.cars = [car for car in st.session_state.cars if not car.is_off_screen()]
 
 # Main title
 st.title("🚦 Crossroad Traffic Light Simulation")
 
-# Create intersection HTML
-cars_html = ''.join([car.get_html() for car in st.session_state.cars])
+tab1, tab2 = st.tabs(["📊 Simulation", "📈 Performance Metrics"])
 
-intersection_html = f"""
-<div class="intersection-container">
-    <div class="road-horizontal"></div>
-    <div class="road-vertical"></div>
-    <div class="road-line-h"></div>
-    <div class="road-line-v"></div>
-    <div class="intersection-center"></div>
-    
-    <div class="traffic-light-pos-ns">
-        {traffic_light_with_ped(get_light_state('ns'), get_light_state('ns_ped'))}
-    </div>
-    
-    <div class="traffic-light-pos-ew">
-        {traffic_light_with_ped(get_light_state('ew'), get_light_state('ew_ped'))}
-    </div>
-    
-    {cars_html}
-</div>
-"""
+with tab1:
+    # Create intersection HTML
+    cars_html = ''.join([car.get_html() for car in st.session_state.cars])
 
-st.markdown(f'<div class="intersection-container"><div class="road-horizontal"></div><div class="road-vertical"></div><div class="road-line-h"></div><div class="road-line-v"></div><div class="intersection-center"></div><div class="traffic-light-pos-ns">{traffic_light_with_ped(get_light_state('ns'), get_light_state('ns_ped'))}</div><div class="traffic-light-pos-ew">{traffic_light_with_ped(get_light_state('ew'), get_light_state('ew_ped'))}</div>{cars_html}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="intersection-container"><div class="road-horizontal"></div><div class="road-vertical"></div><div class="road-line-h"></div><div class="road-line-v"></div><div class="intersection-center"></div><div class="traffic-light-pos-ns">{traffic_light_with_ped(get_light_state('ns'), get_light_state('ns_ped'))}</div><div class="traffic-light-pos-ew">{traffic_light_with_ped(get_light_state('ew'), get_light_state('ew_ped'))}</div>{cars_html}</div>', unsafe_allow_html=True)
+
+with tab2:
+    st.subheader("Performance Evaluation Metrics")
+    
+    if st.session_state.statistics['total_cars_served'] > 0:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            avg_wait = np.mean(st.session_state.statistics['wait_times'])
+            st.metric("Avg Wait Time (W)", f"{avg_wait:.2f}s")
+        
+        with col2:
+            max_wait = max(st.session_state.statistics['wait_times'])
+            st.metric("Max Wait Time", f"{max_wait:.2f}s")
+        
+        with col3:
+            throughput = st.session_state.statistics['total_cars_served'] / max(st.session_state.simulation_time, 1) * 60
+            st.metric("Throughput", f"{throughput:.2f} cars/min")
+        
+        with col4:
+            st.metric("Cars Served", st.session_state.statistics['total_cars_served'])
+        
+        # Queue length charts
+        st.markdown("### Queue Length Over Time")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.session_state.statistics['queue_lengths_ns']:
+                avg_queue_ns = np.mean(st.session_state.statistics['queue_lengths_ns'])
+                ns_text_color = "white"
+                if avg_queue_ns > 4:
+                    ns_text_color = "orange"
+                elif avg_queue_ns > 7:
+                    ns_text_color = "red"
+                st.markdown(f"<div style='font-size: 30px;'>Avg Queue (N-S): <br><span style='color: {ns_text_color}; font-size: 28px;'> {avg_queue_ns:.2f} cars</span></div>", unsafe_allow_html=True)
+                
+        with col2:
+            if st.session_state.statistics['queue_lengths_ew']:
+                avg_queue_ew = np.mean(st.session_state.statistics['queue_lengths_ew'])
+                ew_text_color = "white"
+                if avg_queue_ew > 4:
+                    ew_text_color = "orange" 
+                elif avg_queue_ew > 7:
+                    ew_text_color = "red"
+                st.markdown(f"<div style='font-size: 30px;'>Avg Queue (E-W): <br><span style='color: {ew_text_color}; font-size: 28px;'> {avg_queue_ew:.2f} cars</span>", unsafe_allow_html=True)
+
+        with col3:
+            if st.session_state.statistics['queue_lengths_ew'] and st.session_state.statistics['queue_lengths_ns']:
+                avg_queue = np.mean(st.session_state.statistics['queue_lengths_ew'] + st.session_state.statistics['queue_lengths_ns'])
+                text_color = "white"
+                if avg_queue > 4:
+                    text_color = "orange"
+                elif avg_queue > 7:
+                    text_color = "red"
+                st.markdown(f"<div style='font-size: 30px;'>Avg Queue: <br><span style='color: {text_color}; font-size: 28px;'> {avg_queue:.2f} cars</span>", unsafe_allow_html=True)
+        
+        # Wait time distribution
+        st.markdown("### Wait Time Distribution")
+        if len(st.session_state.statistics['wait_times']) > 0:
+            df_wait = pd.DataFrame({'Wait Time (s)': st.session_state.statistics['wait_times']})
+            st.bar_chart(df_wait['Wait Time (s)'].value_counts().sort_index())
+        
+        # Traffic distribution
+        st.markdown("### Traffic Distribution by Direction")
+        df_traffic = pd.DataFrame({
+            'Direction': list(st.session_state.statistics['cars_per_direction'].keys()),
+            'Count': list(st.session_state.statistics['cars_per_direction'].values())
+        })
+        st.bar_chart(df_traffic.set_index('Direction'))
+        
+    else:
+        st.info("Start the simulation to collect performance data")
 
 # Auto-refresh when running
 if st.session_state.running:
