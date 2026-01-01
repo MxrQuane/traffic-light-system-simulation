@@ -198,22 +198,18 @@ if st.session_state.time > 0:
     availability = sum((N - i) * pi_est[i] for i in range(N + 1)) / N
     
     mean_failed = sum(i * pi_est[i] for i in range(N + 1))
-    rho = (mean_failed * lambda_rate) / (teams * mu_rate)
 
     st.subheader("📊 Estimated Steady-State Statistics")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.success(f"**ρ (Facteur de charge):** {rho:.4f}")
-
-    with col2:
         st.success(f"**Mean failed machines:** {mean_failed:.2f}")
 
-    with col3:
+    with col2:
         st.success(f"**Availability:** {availability:.4f}")
 
-    with col4:
+    with col3:
         st.write("**State probabilities:**")
         for i, p in enumerate(pi_est):
             st.write(f"P(X = {i}) = {p:.4f}")
@@ -242,15 +238,14 @@ def theoretical_steady_state(N, lambda_rate, mu_rate, teams):
 st.subheader("📐 Theoretical")
 pi_theory, avail_theory = theoretical_steady_state(N, lambda_rate, mu_rate, teams)
 mean_failed_theory = sum(i * pi_theory[i] for i in range(N + 1))
-rho_theory = (mean_failed_theory * lambda_rate) / (teams * mu_rate)
-col1, col2, col3, col4 = st.columns(4)
+
+col1, col2, col3= st.columns(3)
+
 with col1:
-    st.info(f"**ρ (Facteur de charge):** {rho_theory:.4f}")
-with col2:
     st.info(f"**Mean failed machines:** {mean_failed_theory:.2f}")
-with col3:
+with col2:
     st.info(f"Availability: {avail_theory:.4f}")
-with col4:
+with col3:
     st.write("**Theoretical steady-state:**")
     for i, p in enumerate(pi_theory):
         st.write(f"π({i}) = {p:.4f}")
