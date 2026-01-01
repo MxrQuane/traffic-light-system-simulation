@@ -196,53 +196,64 @@ if len(st.session_state.history) > 1:
 if st.session_state.time > 0:
     pi_est = st.session_state.time_in_state / st.session_state.time
     availability = sum((N - i) * pi_est[i] for i in range(N + 1)) / N
+    
+    mean_failed = sum(i * pi_est[i] for i in range(N + 1))
+    rho = (mean_failed * lambda_rate) / (teams * mu_rate)
 
     st.subheader("📊 Estimated Steady-State Statistics")
 
-    for i, p in enumerate(pi_est):
-        st.write(f"P(X = {i}) = {p:.4f}")
+    col1, col2, col3, col4 = st.columns(4)
 
-    st.success(f"🔋 Availability = {availability:.4f}")
+    with col1:
+        st.success(f"**ρ (Facteur de charge):** {rho:.4f}")
+
+    with col2:
+        st.success(f"**Mean failed machines:** {mean_failed:.2f}")
+
+    with col3:
+        st.success(f"**Availability:** {availability:.4f}")
+
+    with col4:
+        st.write("**State probabilities:**")
+        for i, p in enumerate(pi_est):
+            st.write(f"P(X = {i}) = {p:.4f}")
+
 
 def theoretical_steady_state(N, lambda_rate, mu_rate, teams):
-    rho = lambda_rate / mu_rate
-    pi = np.zeros(N+1)
-    
-    if teams == 1:
-        pi[0] = 1.0
-        for i in range(1, N+1):
-            pi[i] = pi[i-1] * (N - i + 1) * rho / i
-        pi = pi / np.sum(pi)
-    else:  # teams == 2
-        pi[0] = 1.0
-        pi[1] = N * rho * pi[0]
-        for i in range(2, N+1):
-            if i <= 2:
-                pi[i] = pi[i-1] * (N - i + 1) * rho / 2
-            else:
-                pi[i] = pi[i-1] * (N - i + 1) * rho / 2
-        pi = pi / np.sum(pi)
-    
-    theoretical_availability = sum((N - i) * pi[i] for i in range(N+1)) / N
-    return pi, theoretical_availability
+    pi = np.zeros(N + 1)
+
+    # pi[0] = 1 before normalization
+    pi[0] = 1.0
+
+    for i in range(1, N + 1):
+        birth = (N - i + 1) * lambda_rate
+        death = min(i, teams) * mu_rate
+        pi[i] = pi[i - 1] * birth / death
+
+    # Normalize
+    pi = pi / np.sum(pi)
+
+    # Availability (same definition as simulation)
+    availability = sum((N - i) * pi[i] for i in range(N + 1)) / N
+
+    return pi, availability
 
 # Display comparison
 st.subheader("📐 Theoretical")
 pi_theory, avail_theory = theoretical_steady_state(N, lambda_rate, mu_rate, teams)
-col1, col2 = st.columns(2)
+mean_failed_theory = sum(i * pi_theory[i] for i in range(N + 1))
+rho_theory = (mean_failed_theory * lambda_rate) / (teams * mu_rate)
+col1, col2, col3, col4 = st.columns(4)
 with col1:
+    st.info(f"**ρ (Facteur de charge):** {rho_theory:.4f}")
+with col2:
+    st.info(f"**Mean failed machines:** {mean_failed_theory:.2f}")
+with col3:
+    st.info(f"Availability: {avail_theory:.4f}")
+with col4:
     st.write("**Theoretical steady-state:**")
     for i, p in enumerate(pi_theory):
         st.write(f"π({i}) = {p:.4f}")
-    st.info(f"Theoretical availability: {avail_theory:.4f}")
-
-# Footer
-st.markdown(
-    "<div class='footer'>"
-    "Continuous-Time Markov Chain • Birth–Death Process • Streamlit Simulation"
-    "</div>",
-    unsafe_allow_html=True
-)
 
 if st.session_state.running and st.session_state.time < T_MAX:
     time.sleep(animation_delay)

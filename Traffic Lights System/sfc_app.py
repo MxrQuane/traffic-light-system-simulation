@@ -11,7 +11,7 @@ def load_css(file_name):
     with open(file_name) as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
-load_css("Traffic Lights System/styles.css")
+load_css("styles.css")
 
 # Initialize session state
 if 'phase' not in st.session_state:
@@ -185,8 +185,10 @@ if st.sidebar.button("🔄 Reset"):
     st.session_state.departed_cars = []
 
 # Calculate and display system utilization
-mean_service_time = (green_min + green_max) / 2
-rho = (arrival_rate / 60) / (1 / mean_service_time)
+green_moyen = (green_min + green_max) / 2
+full_cycle = green_moyen * 2
+mean_service_time = 60 / full_cycle
+rho = (arrival_rate / 2) / mean_service_time
 st.sidebar.markdown(f"**System Utilization (ρ):** {rho:.3f}")
 if rho >= 1:
     st.sidebar.warning("⚠️ System unstable (ρ ≥ 1)")
